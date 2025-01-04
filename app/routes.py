@@ -5,10 +5,12 @@ from . import db
 from .models import Client, Device, Users, Jobcards
 from .email_service import email_service
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
+from reportlab.lib.enums import TA_LEFT
+from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
 from email.mime.text import MIMEText
@@ -205,7 +207,7 @@ class DeviceSearchResource(Resource):
 
         # Query the database for the device with the given serial number
         device = Device.query.filter_by(device_serial_number=args['device_serial_number']).first()
-        
+
         if device:
             return device.to_dict(), 200
         else:
@@ -448,105 +450,77 @@ class JobcardUpdateResource(Resource):
             return {'error': str(e)}, 500
 
 def generate_invoice_pdf(invoice_data):
-    """
-    Generate a PDF invoice from the provided invoice data
-    
-    :param invoice_data: Dictionary containing invoice details
-    :return: BytesIO object with PDF content
-    """
-    # Create a buffer for the PDF
     buffer = io.BytesIO()
-    
-    # Create the PDF document
-    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
-    
-    # Container for the 'Flowable' objects
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=30)
     elements = []
-    
-    # Styles
+
     styles = getSampleStyleSheet()
-    
+    title_style = styles['Title']
+    normal_style = styles['Normal']
+
+    # Align Title to the left
+    title_style.alignment = TA_LEFT
+
     # Company Header
-    elements.append(Paragraph("Laptop Care Service", styles['Title']))
-    elements.append(Paragraph("Invoice", styles['Heading2']))
-    
-    # Company Details
-    company_details = [
-        ["Laptop Care Service"],
-        ["Nairobi, Kenya"],
-        ["Phone: +254 (0) 700 000 000"],
-        ["Email: support@laptopcare.com"]
-    ]
-    company_details_table = Table(company_details, colWidths=[6*inch])
-    company_details_table.setStyle(TableStyle([
-        ('ALIGN', (0,0), (-1,-1), 'RIGHT'),
-        ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,-1), 10),
-    ]))
-    elements.append(company_details_table)
-    
-    # Client Information
-    client_info = [
-        ["Bill To:", "Invoice Details:"],
-        [invoice_data['client_name'], f"Invoice Number: {invoice_data['jobcard_id']}"],
-        [invoice_data['client_email'], f"Date: {datetime.now().strftime('%Y-%m-%d')}"],
-        [invoice_data['device_info'], ""]
-    ]
-    client_info_table = Table(client_info, colWidths=[3*inch, 3*inch])
-    client_info_table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (1,0), colors.grey),
-        ('TEXTCOLOR', (0,0), (1,0), colors.whitesmoke),
-        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,0), 12),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 12),
-        ('BACKGROUND', (0,1), (-1,-1), colors.beige),
-    ]))
-    elements.append(client_info_table)
-    
-    # Invoice Items
+    elements.append(Paragraph("<b>Laptop Care Limited</b>", title_style))
+    elements.append(Spacer(1, 6))
+    elements.append(Paragraph("Westlands", normal_style))
+    elements.append(Paragraph("Nairobi, Kenya", normal_style))
+    elements.append(Paragraph("Phone: +254 722 123 456", normal_style))
+    elements.append(Spacer(1, 12))
+
+    # Invoice Details
+    elements.append(Paragraph("<b>Invoice # {}</b>".format(invoice_data['jobcard_id']), title_style))
+    elements.append(Spacer(1, 6))
+    elements.append(Paragraph("Date: {}".format(datetime.now().strftime('%B %d, %Y')), normal_style))
+    elements.append(Spacer(1, 12))
+
+    # Bill To Section
+    elements.append(Paragraph("<b>Bill to:</b>", title_style))
+    elements.append(Paragraph("Client Name: {}".format(invoice_data['client_name']), normal_style))
+    elements.append(Paragraph("Client Email: {}".format(invoice_data['client_email']), normal_style))
+    elements.append(Paragraph("Client Phone: {}".format(invoice_data.get('client_phone', 'N/A')), normal_style))  # Fallback to 'N/A' if missing
+    elements.append(Paragraph("Device Info: {}".format(invoice_data['device_info']), normal_style))
+    elements.append(Spacer(1, 12))
+
+    # Invoice Items Table
     items_data = [['Type', 'Description', 'Quantity', 'Unit Price', 'Total']]
     total_amount = 0
+
     for item in invoice_data['items']:
-        # Default quantity to 1 if not specified
         quantity = item.get('quantity', 1)
         unit_price = float(item['price'])
         item_total = quantity * unit_price
         total_amount += item_total
         
-        items_data.append([
-            item['type'].capitalize(), 
-            item['description'], 
-            str(quantity),
-            f"Ksh {unit_price:,.2f}", 
-            f"Ksh {item_total:,.2f}"
-        ])
-    
-    # Add total row
-    items_data.append(['', '', '', 'Total:', f"Ksh {total_amount:,.2f}"])
-    
-    items_table = Table(items_data, colWidths=[1*inch, 3*inch, 1*inch, 1.5*inch, 1.5*inch])
+        items_data.append([item['type'], item['description'], str(quantity), f"{unit_price:,.2f}", f"{item_total:,.2f}"])
+
+    items_table = Table(items_data, colWidths=[1.5*inch, 3*inch, 1*inch, 1.5*inch, 1.5*inch])
     items_table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.grey),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
-        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
-        ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0,0), (-1,0), 12),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 12),
-        ('BACKGROUND', (0,1), (-1,-1), colors.beige),
-        ('GRID', (0,0), (-1,-1), 1, colors.black)
-    ]))
+    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+    ('GRID', (0, 0), (-1, -1), 1, colors.black),
+    ('LEFTPADDING', (0, 0), (-1, -1), 10),  # Padding inside cells
+    ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+    ('TOPPADDING', (0, 0), (-1, -1), 6),
+    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+]))
+
     elements.append(items_table)
-    
-    # Additional Notes
-    elements.append(Paragraph("Thank you for your business!", styles['Normal']))
-    
-    # Build PDF
+    elements.append(Spacer(1, 12))
+
+    # Notes Section
+    elements.append(Paragraph("Notes:", title_style))
+    elements.append(Paragraph("Thank you for choosing Laptop Care Limited! All repair work is guaranteed for 90 days.", normal_style))
+    elements.append(Spacer(1, 12))
+
+    # Payment Terms Section
+    elements.append(Paragraph("Payment Terms:", title_style))
+    elements.append(Paragraph("Payment is due within 30 days.", normal_style))
+
     doc.build(elements)
-    
-    # Move buffer pointer to the beginning
     buffer.seek(0)
     return buffer
+
 
 @jobcards_ns.route('/generate-invoice', endpoint='generate_invoice')
 class InvoiceGenerationResource(Resource):
@@ -574,7 +548,7 @@ class InvoiceGenerationResource(Resource):
                     <p>Please find attached the invoice for your recent laptop repair service.</p>
                     
                     <div style="margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; background-color: white;">
-                        <p><strong>Job Card ID:</strong> {data['jobcard_id']}</p>
+                        <p><strong>Invoice Number:</strong> {data['jobcard_id']}</p>
                         <p><strong>Device:</strong> {data['device_info']}</p>
                         <p><strong>Total Cost:</strong> Ksh {float(data['total']):,.2f}</p>
                     </div>

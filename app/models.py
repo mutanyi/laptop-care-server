@@ -76,14 +76,36 @@ class Device(db.Model, SerializerMixin):
     brand = db.Column(db.String(100), nullable=False) 
     hdd_or_ssd = db.Column(db.Text, nullable=True)
     hdd_or_ssd_serial_number = db.Column(db.String(50), nullable=True)
+    hdd_or_ssd_onboard = db.Column(db.String(50), nullable=True)
     memory = db.Column(db.String(50), nullable=True)
     memory_serial_number = db.Column(db.String(50), nullable=True)
+    memory_onboard = db.Column(db.String(50), nullable=True)
     battery = db.Column(db.String(50), nullable=True)
     battery_serial_number = db.Column(db.String(50), nullable=True)
     adapter = db.Column(db.String(50), nullable=True) 
     adapter_serial_number = db.Column(db.String(50), nullable=True) 
     client_id = db.Column(db.Integer, db.ForeignKey('clients.id'), nullable=False)
-    warranty_status = db.Column(db.String(100), nullable=False) 
+    warranty_status = db.Column(db.String(100), nullable=True) 
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "device_serial_number": self.device_serial_number,
+            "device_model": self.device_model,
+            "brand": self.brand,
+            "hdd_or_ssd": self.hdd_or_ssd,
+            "hdd_or_ssd_serial_number": self.hdd_or_ssd_serial_number,
+            "hdd_or_ssd_onboard": self.hdd_or_ssd_onboard,
+            "memory": self.memory,
+            "memory_serial_number": self.memory_serial_number,
+            "memory_onboard": self.memory_onboard,
+            "battery": self.battery,
+            "battery_serial_number": self.battery_serial_number,
+            "adapter": self.adapter,
+            "adapter_serial_number": self.adapter_serial_number,
+            "client_id": self.client_id,
+            "warranty_status": self.warranty_status
+        }
 
     def __repr__(self):
         return f'<Device {self.brand}>'
@@ -131,7 +153,7 @@ class Jobcards(db.Model, SerializerMixin):
     problem_description = db.Column(db.String(100), nullable=False)
     status = db.Column(db.String(50), nullable=False)
     device_id = db.Column(db.Integer, db.ForeignKey('devices.id'), nullable=False)
-    diagnostic = db.Column(db.String(50), nullable=True)
+    diagnostic = db.Column(db.Text, nullable=True)
     timestamp = db.Column(DateTime, default=lambda: datetime.now(pytz.timezone('Africa/Nairobi')))  # Add the timestamp column
     cost = db.Column(db.Integer, nullable=True)
     assigned_technician_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
