@@ -29,7 +29,7 @@ def create_app():
     email_service.start_email_service()
 
     # Apply CORS to the app
-    CORS(app, origins=["http://localhost:3000", "https://laptop-care-client.vercel.app"], supports_credentials=True)
+    CORS(app, origins=["http://localhost:3000", "https://laptop.xios.co.ke"], supports_credentials=True)
 
     from .routes import client_ns, device_ns, users_ns, jobcards_ns
     api.add_namespace(client_ns)
